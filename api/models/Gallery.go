@@ -16,6 +16,7 @@ type Gallery struct {
 	GalleryUid  string    `json:"gallery_uid"`                  //唯一uid
 	Image       string    `json:"image"`                        //图片
 	IsCloud115  bool      `json:"is_cloud115"`                  //是否是115云盘直连
+	ShareURL    string    `json:"share_url"`                    //115分享链接
 	Works       []Work    `json:"works"`                        //添加的目录列表
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

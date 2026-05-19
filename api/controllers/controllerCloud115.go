@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -70,6 +71,29 @@ func Post115QRCodeLogin(c *gin.Context) {
 func Proxy115File(c *gin.Context) {
 	_ = c.Param("gallery_uid")
 	pickCode := c.Param("pick_code")
+	pickCode = strings.TrimPrefix(pickCode, "/")
+
+	if strings.HasPrefix(pickCode, "share:") {
+		parts := strings.SplitN(pickCode, ":", 3)
+		if len(parts) != 3 {
+			c.String(http.StatusBadRequest, "无效的分享文件标识")
+			return
+		}
+		sharePC := parts[1]
+		shareURL := parts[2]
+		pickCode, err := cloud115.TransferSingleShareFile(shareURL, sharePC)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "转存失败: %s", err.Error())
+			return
+		}
+		dlURL, err := cloud115.Cloud115GetDownURL(pickCode)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "获取下载链接失败: %s", err.Error())
+			return
+		}
+		c.Redirect(http.StatusFound, dlURL)
+		return
+	}
 
 	dlURL, err := cloud115.Cloud115GetDownURL(pickCode)
 	if err != nil {

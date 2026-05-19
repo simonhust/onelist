@@ -204,16 +204,19 @@ func listFilesRecursive(accessToken string, cid string, fileList []string) ([]st
 	return fileList, nil
 }
 
-func GetCloud115FilesPath(cid string) ([]string, error) {
-	if cid == "" {
-		cid = "0"
+func GetCloud115FilesPath(pathOrCid string) ([]string, error) {
+	if strings.HasPrefix(pathOrCid, "http") {
+		return getFilesFromShareURL(pathOrCid)
+	}
+	if pathOrCid == "" {
+		pathOrCid = "0"
 	}
 	err := ensureValidToken()
 	if err != nil {
 		return nil, err
 	}
 	fileList := []string{}
-	fileList, err = listFilesRecursive(config.Cloud115Token, cid, fileList)
+	fileList, err = listFilesRecursive(config.Cloud115Token, pathOrCid, fileList)
 	if err != nil {
 		return nil, err
 	}
@@ -221,6 +224,36 @@ func GetCloud115FilesPath(cid string) ([]string, error) {
 		if strings.HasPrefix(f, "bdmv:") {
 			bdmvCid := strings.TrimPrefix(f, "bdmv:")
 			go getCachedBDMVTree(bdmvCid)
+		}
+	}
+	return fileList, nil
+}
+
+func getFilesFromShareURL(shareURL string) ([]string, error) {
+	entries, err := Get115ShareTree(shareURL)
+	if err != nil {
+		return nil, err
+	}
+	var fileList []string
+	for _, entry := range entries {
+		if entry.Fc == 0 {
+			subEntries, err := Get115ShareSubEntries(shareURL, entry.Cid)
+			if err != nil {
+				continue
+			}
+			for _, sub := range subEntries {
+				if sub.Fc == 0 && strings.ToUpper(sub.N) == "BDMV" {
+					fileList = append(fileList, "bdmv:"+entry.Cid+":"+shareURL)
+					continue
+				}
+				if filterVideoEntry(sub) && sub.Fc != 0 && sub.Pc != "" {
+					fileList = append(fileList, "share:"+sub.Pc+":"+shareURL)
+				}
+			}
+		} else {
+			if filterVideoEntry(entry) && entry.Pc != "" {
+				fileList = append(fileList, "share:"+entry.Pc+":"+shareURL)
+			}
 		}
 	}
 	return fileList, nil
@@ -746,6 +779,43 @@ func Transfer115ShareFile(shareURL string, fid string) (string, string, error) {
 		}
 	}
 	return "", "", errors.New("转存成功但未找到文件")
+}
+
+func findShareFidByPc(shareURL string, targetPc string) (string, error) {
+	entries, err := Get115ShareTree(shareURL)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		if e.Fc == 0 {
+			subs, err := Get115ShareSubEntries(shareURL, e.Cid)
+			if err != nil {
+				continue
+			}
+			for _, s := range subs {
+				if s.Fc != 0 && s.Pc == targetPc {
+					return s.Fid, nil
+				}
+			}
+		} else {
+			if e.Pc == targetPc {
+				return e.Fid, nil
+			}
+		}
+	}
+	return "", errors.New("分享中未找到该文件")
+}
+
+func TransferSingleShareFile(shareURL string, targetPc string) (string, error) {
+	fid, err := findShareFidByPc(shareURL, targetPc)
+	if err != nil {
+		return "", err
+	}
+	_, newPc, err := Transfer115ShareFile(shareURL, fid)
+	if err != nil {
+		return "", err
+	}
+	return newPc, nil
 }
 
 func TransferAndScrapeShare(shareURL string) ([]string, error) {

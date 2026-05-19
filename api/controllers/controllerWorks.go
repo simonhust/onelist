@@ -96,6 +96,9 @@ func CreateWork(c *gin.Context) {
 		return
 	}
 	work.GalleryUid = gallery.GalleryUid
+	if gallery.ShareURL != "" {
+		work.Path = gallery.ShareURL
+	}
 	var files = []string{}
 	if gallery.IsCloud115 {
 		files, err = cloud115.GetCloud115FilesPath(work.Path)

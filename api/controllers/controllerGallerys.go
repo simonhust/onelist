@@ -128,14 +128,14 @@ func GetGalleryHostByUid(c *gin.Context) {
 	func(galleryRepository repository.GalleryRepository) {
 		gallery, err := galleryRepository.FindByUID(id)
 		if err != nil {
-			c.JSON(200, gin.H{"code": 201, "msg": "没有查询到资源!", "data": "", "is_cloud115": false})
+			c.JSON(200, gin.H{"code": 201, "msg": "没有查询到资源!", "data": "", "is_cloud115": false, "share_url": ""})
 			return
 		}
 		if gallery.IsCloud115 {
-			c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": "https://proapi.115.com", "is_cloud115": true})
+			c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": "https://proapi.115.com", "is_cloud115": true, "share_url": gallery.ShareURL})
 			return
 		}
-		c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": "", "is_cloud115": false})
+		c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": "", "is_cloud115": false, "share_url": ""})
 	}(repo)
 }
 
