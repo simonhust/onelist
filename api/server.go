@@ -314,6 +314,9 @@ func Run() {
 	cloud115Group.GET("/qrcode/status", auth.JWTAuthAdmin(), controllers.Get115QRCodeStatus)
 	cloud115Group.POST("/qrcode/login", auth.JWTAuthAdmin(), controllers.Post115QRCodeLogin)
 
+	// 115云盘BDMV代理
+	r.GET("/v1/api/cloud115/bdmv/:gallery_uid/:cid/*filepath", controllers.Proxy115BDMV)
+
 	// 设置
 	setting := r.Group("/v1/api/config", auth.JWTAuth())
 	setting.POST("/save", auth.JWTAuthAdmin(), controllers.SaveConfig)

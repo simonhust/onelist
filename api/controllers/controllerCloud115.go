@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -69,4 +70,33 @@ func Post115QRCodeLogin(c *gin.Context) {
 
 	cache.NewCache().Delete("qrcode:" + uid)
 	c.JSON(200, gin.H{"code": 200, "msg": "登录成功", "data": gin.H{"cookie": cookie}})
+}
+
+func Proxy115BDMV(c *gin.Context) {
+	galleryUid := c.Param("gallery_uid")
+	cid := c.Param("cid")
+	filepath := c.Param("filepath")
+
+	if filepath == "" || filepath == "/" {
+		entries, err := cloud115.Cloud115ListBDMVFiles(galleryUid, cid)
+		if err != nil {
+			c.JSON(200, gin.H{"code": 201, "msg": err.Error(), "data": ""})
+			return
+		}
+		c.JSON(200, gin.H{"code": 200, "msg": "success", "data": entries})
+		return
+	}
+
+	pickCode, err := cloud115.Cloud115FindFileInBDMV(galleryUid, cid, filepath)
+	if err != nil {
+		c.String(http.StatusNotFound, "文件不存在: %s", err.Error())
+		return
+	}
+
+	dlURL, err := cloud115.Cloud115GetBDMVDownURL(galleryUid, pickCode)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "获取下载链接失败: %s", err.Error())
+		return
+	}
+	c.Redirect(http.StatusFound, dlURL)
 }

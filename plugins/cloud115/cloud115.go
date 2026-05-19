@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/msterzhang/onelist/api/database"
@@ -21,6 +22,16 @@ const (
 	PASSPORT_API  = "https://passportapi.115.com"
 	WEB_API       = "https://webapi.115.com"
 	UA_CLOUD115   = "Mozilla/5.0 (115Tool/5.4)"
+)
+
+type bdmvCacheEntry struct {
+	data      map[string]string
+	expiresAt time.Time
+}
+
+var (
+	bdmvCache   = make(map[string]bdmvCacheEntry)
+	bdmvCacheMu sync.RWMutex
 )
 
 func httpClient() *http.Client {
@@ -151,9 +162,13 @@ func filterVideoEntry(entry Cloud115FileEntry) bool {
 	return strings.Contains(config.VideoTypes, ext)
 }
 
+func isBDMVFolder(entry Cloud115FileEntry) bool {
+	return entry.Fc == 0 && strings.ToUpper(entry.N) == "BDMV"
+}
+
 func skipRecurseDir(name string) bool {
 	upper := strings.ToUpper(name)
-	skipDirs := []string{"BDMV", "CERTIFICATE"}
+	skipDirs := []string{"CERTIFICATE"}
 	for _, d := range skipDirs {
 		if upper == d {
 			return true
@@ -169,6 +184,10 @@ func listFilesRecursive(accessToken string, cid string, fileList []string) ([]st
 	}
 	for _, entry := range entries {
 		if entry.Fc == 0 {
+			if isBDMVFolder(entry) {
+				fileList = append(fileList, "bdmv:"+cid)
+				continue
+			}
 			if skipRecurseDir(entry.N) {
 				continue
 			}
@@ -194,7 +213,17 @@ func GetCloud115FilesPath(cid string, gallery models.Gallery) ([]string, error) 
 		return nil, err
 	}
 	fileList := []string{}
-	return listFilesRecursive(gallery.Cloud115Token, cid, fileList)
+	fileList, err = listFilesRecursive(gallery.Cloud115Token, cid, fileList)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range fileList {
+		if strings.HasPrefix(f, "bdmv:") {
+			bdmvCid := strings.TrimPrefix(f, "bdmv:")
+			go getCachedBDMVTree(gallery.GalleryUid, bdmvCid)
+		}
+	}
+	return fileList, nil
 }
 
 func Cloud115RenameFile(fid string, newName string, galleryUid string) error {
@@ -419,4 +448,131 @@ func Cloud115QRLogin(uid string) (string, error) {
 		return strings.Join(pairs, "; "), nil
 	}
 	return "", errors.New(data.Error)
+}
+
+func Cloud115ListBDMVFiles(galleryUid string, cid string) ([]Cloud115FileEntry, error) {
+	gallery := models.Gallery{}
+	db := database.NewDb()
+	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
+	if err != nil {
+		return nil, err
+	}
+	err = ensureValidToken(&gallery)
+	if err != nil {
+		return nil, err
+	}
+	return getAllEntriesByCid(gallery.Cloud115Token, cid)
+}
+
+func Cloud115FindFileInBDMV(galleryUid string, rootCid string, filePath string) (string, error) {
+	tree, err := getCachedBDMVTree(galleryUid, rootCid)
+	if err != nil {
+		return "", err
+	}
+	cleanPath := strings.Trim(filePath, "/")
+	pickCode, ok := tree[cleanPath]
+	if !ok {
+		return "", errors.New("file not found in BDMV: " + filePath)
+	}
+	return pickCode, nil
+}
+
+func getCachedBDMVTree(galleryUid string, rootCid string) (map[string]string, error) {
+	bdmvCacheMu.RLock()
+	entry, exists := bdmvCache[rootCid]
+	bdmvCacheMu.RUnlock()
+	if exists && time.Now().Before(entry.expiresAt) {
+		return entry.data, nil
+	}
+
+	gallery := models.Gallery{}
+	db := database.NewDb()
+	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
+	if err != nil {
+		return nil, err
+	}
+	err = ensureValidToken(&gallery)
+	if err != nil {
+		return nil, err
+	}
+
+	tree := make(map[string]string)
+	err = buildBDMVTree(gallery.Cloud115Token, rootCid, "", tree)
+	if err != nil {
+		return nil, err
+	}
+
+	bdmvCacheMu.Lock()
+	bdmvCache[rootCid] = bdmvCacheEntry{
+		data:      tree,
+		expiresAt: time.Now().Add(30 * time.Minute),
+	}
+	bdmvCacheMu.Unlock()
+
+	return tree, nil
+}
+
+func buildBDMVTree(accessToken string, cid string, prefix string, result map[string]string) error {
+	entries, _, err := getFilesByCid(accessToken, cid, 0)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		childPath := entry.N
+		if prefix != "" {
+			childPath = prefix + "/" + entry.N
+		}
+		if entry.Fc == 0 {
+			err = buildBDMVTree(accessToken, entry.Cid, childPath, result)
+			if err != nil {
+				return err
+			}
+		} else if entry.Pc != "" {
+			result[childPath] = entry.Pc
+		}
+	}
+	return nil
+}
+
+func Cloud115GetBDMVDownURL(galleryUid string, pickCode string) (string, error) {
+	gallery := models.Gallery{}
+	db := database.NewDb()
+	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
+	if err != nil {
+		return "", err
+	}
+	err = ensureValidToken(&gallery)
+	if err != nil {
+		return "", err
+	}
+	form := url.Values{}
+	form.Set("pick_code", pickCode)
+	api := fmt.Sprintf("%s/open/ufile/downurl", PRO_API)
+	req, err := http.NewRequest("POST", api, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", UA_CLOUD115)
+	req.Header.Set("Authorization", "Bearer "+gallery.Cloud115Token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var data Cloud115RspDownURL
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return "", err
+	}
+	if data.State {
+		for _, v := range data.Data {
+			return v.URL.URL, nil
+		}
+	}
+	return "", errors.New(data.Message)
 }
