@@ -72,6 +72,18 @@ func Post115QRCodeLogin(c *gin.Context) {
 	c.JSON(200, gin.H{"code": 200, "msg": "登录成功", "data": gin.H{"cookie": cookie}})
 }
 
+func Proxy115File(c *gin.Context) {
+	galleryUid := c.Param("gallery_uid")
+	pickCode := c.Param("pick_code")
+
+	dlURL, err := cloud115.Cloud115GetDownURL(pickCode, galleryUid)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "获取下载链接失败: %s", err.Error())
+		return
+	}
+	c.Redirect(http.StatusFound, dlURL)
+}
+
 func Proxy115BDMV(c *gin.Context) {
 	galleryUid := c.Param("gallery_uid")
 	cid := c.Param("cid")

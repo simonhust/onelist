@@ -317,6 +317,9 @@ func Run() {
 	// 115云盘BDMV代理
 	r.GET("/v1/api/cloud115/bdmv/:gallery_uid/:cid/*filepath", controllers.Proxy115BDMV)
 
+	// 115云盘文件302代理
+	r.GET("/v1/api/cloud115/file/:gallery_uid/*pick_code", controllers.Proxy115File)
+
 	// 设置
 	setting := r.Group("/v1/api/config", auth.JWTAuth())
 	setting.POST("/save", auth.JWTAuthAdmin(), controllers.SaveConfig)
