@@ -308,6 +308,12 @@ func Run() {
 	aliOpen := r.Group("/v1/api/aliopen")
 	aliOpen.POST("/video", controllers.AliOpenVideo)
 
+	// 115云盘扫码
+	cloud115Group := r.Group("/v1/api/cloud115")
+	cloud115Group.GET("/qrcode", auth.JWTAuthAdmin(), controllers.Get115QRCode)
+	cloud115Group.GET("/qrcode/status", auth.JWTAuthAdmin(), controllers.Get115QRCodeStatus)
+	cloud115Group.POST("/qrcode/login", auth.JWTAuthAdmin(), controllers.Post115QRCodeLogin)
+
 	// 设置
 	setting := r.Group("/v1/api/config", auth.JWTAuth())
 	setting.POST("/save", auth.JWTAuthAdmin(), controllers.SaveConfig)

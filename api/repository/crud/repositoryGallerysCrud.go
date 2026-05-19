@@ -86,7 +86,7 @@ func (r *RepositoryGallerysCRUD) FindAll(page int, size int) ([]models.Gallery, 
 	done := make(chan bool)
 	go func(ch chan<- bool) {
 		defer close(ch)
-		result := r.db.Model(&models.Gallery{}).Select([]string{"created_at", "gallery_type","gallery_uid","id","image","is_alist","is_tv","title","updated_at"}).Find(&gallerys)
+		result := r.db.Model(&models.Gallery{}).Select([]string{"created_at", "gallery_type","gallery_uid","id","image","is_cloud115","is_tv","title","updated_at"}).Find(&gallerys)
 		result.Count(&num)
 		if config.DBDRIVER == "sqlite" {
 			err = result.Limit(size).Offset((page - 1) * size).Order("datetime(updated_at) desc").Scan(&gallerys).Error

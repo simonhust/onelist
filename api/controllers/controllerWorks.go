@@ -9,7 +9,7 @@ import (
 	"github.com/msterzhang/onelist/api/repository"
 	"github.com/msterzhang/onelist/api/repository/crud"
 	"github.com/msterzhang/onelist/api/utils/dir"
-	"github.com/msterzhang/onelist/plugins/alist"
+	"github.com/msterzhang/onelist/plugins/cloud115"
 	"github.com/msterzhang/onelist/plugins/thedb"
 	"gorm.io/gorm"
 
@@ -97,8 +97,8 @@ func CreateWork(c *gin.Context) {
 	}
 	work.GalleryUid = gallery.GalleryUid
 	var files = []string{}
-	if gallery.IsAlist {
-		files, err = alist.GetAlistFilesPath(work.Path, work.IsRef, gallery)
+	if gallery.IsCloud115 {
+		files, err = cloud115.GetCloud115FilesPath(work.Path, gallery)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": err.Error(), "data": work})
 			return
@@ -138,8 +138,8 @@ func ReNewWork(c *gin.Context) {
 	}
 	work.GalleryUid = gallery.GalleryUid
 	var files = []string{}
-	if gallery.IsAlist {
-		files, err = alist.GetAlistFilesPath(work.Path, work.IsRef, gallery)
+	if gallery.IsCloud115 {
+		files, err = cloud115.GetCloud115FilesPath(work.Path, gallery)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": err.Error(), "data": ""})
 			return

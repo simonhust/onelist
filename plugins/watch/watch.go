@@ -6,7 +6,7 @@ import (
 	"github.com/msterzhang/onelist/api/database"
 	"github.com/msterzhang/onelist/api/models"
 	"github.com/msterzhang/onelist/api/utils/dir"
-	"github.com/msterzhang/onelist/plugins/alist"
+	"github.com/msterzhang/onelist/plugins/cloud115"
 	"github.com/msterzhang/onelist/plugins/thedb"
 	"gorm.io/gorm"
 )
@@ -21,8 +21,8 @@ func RunWork(work models.Work) {
 			return
 		}
 		var files = []string{}
-		if gallery.IsAlist {
-			files, err = alist.GetAlistFilesPath(work.Path, true, gallery)
+		if gallery.IsCloud115 {
+			files, err = cloud115.GetCloud115FilesPath(work.Path, gallery)
 			if err != nil {
 				return
 			}

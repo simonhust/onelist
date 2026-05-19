@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/msterzhang/onelist/api/database"
 	"github.com/msterzhang/onelist/api/models"
@@ -19,12 +18,7 @@ func CreateGallery(c *gin.Context) {
 		c.JSON(200, gin.H{"code": 201, "msg": "创建失败,表单解析出错!", "data": gallery})
 		return
 	}
-	if !strings.Contains(gallery.AlistHost, "http") && gallery.IsAlist {
-		c.JSON(200, gin.H{"code": 201, "msg": "域名应该含有'http'!", "data": gallery})
-		return
-	}
 	db := database.NewDb()
-	gallery.AlistHost = strings.TrimRight(gallery.AlistHost, "/")
 	repo := crud.NewRepositoryGallerysCRUD(db)
 	func(galleryRepository repository.GalleryRepository) {
 		gallery, err := galleryRepository.Save(gallery)
@@ -134,14 +128,14 @@ func GetGalleryHostByUid(c *gin.Context) {
 	func(galleryRepository repository.GalleryRepository) {
 		gallery, err := galleryRepository.FindByUID(id)
 		if err != nil {
-			c.JSON(200, gin.H{"code": 201, "msg": "没有查询到资源!", "data": "", "is_ali_open": false})
+			c.JSON(200, gin.H{"code": 201, "msg": "没有查询到资源!", "data": "", "is_cloud115": false})
 			return
 		}
-		if gallery.IsAlist {
-			c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": gallery.AlistHost, "is_ali_open": gallery.IsAliOpen})
+		if gallery.IsCloud115 {
+			c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": "https://proapi.115.com", "is_cloud115": true})
 			return
 		}
-		c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": "", "is_ali_open": gallery.IsAliOpen})
+		c.JSON(200, gin.H{"code": 200, "msg": "查询资源成功!", "data": "", "is_cloud115": false})
 	}(repo)
 }
 

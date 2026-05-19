@@ -250,11 +250,7 @@ func AddThemovie(c *gin.Context) {
 		c.JSON(200, gin.H{"code": 201, "msg": "Gallery not found!", "data": ""})
 		return
 	}
-	file := addVideo.File
-	if gallery.IsAlist {
-		file = "/d" + addVideo.File
-	}
-	themovieNew, err := thedb.TheMovieDb(addVideo.TheMovieId, file, addVideo.GalleryUid)
+	themovieNew, err := thedb.TheMovieDb(addVideo.TheMovieId, addVideo.File, addVideo.GalleryUid)
 	if err != nil {
 		c.JSON(200, gin.H{"code": 201, "msg": "添加资源失败!", "data": err})
 		return

@@ -10,7 +10,7 @@ import (
 	"github.com/msterzhang/onelist/api/repository/crud"
 	"github.com/msterzhang/onelist/api/service"
 	"github.com/msterzhang/onelist/api/utils/dir"
-	"github.com/msterzhang/onelist/plugins/alist"
+	"github.com/msterzhang/onelist/plugins/cloud115"
 	"github.com/msterzhang/onelist/plugins/thedb"
 
 	"github.com/gin-gonic/gin"
@@ -221,8 +221,8 @@ func AddTheTv(c *gin.Context) {
 		return
 	}
 	var files = []string{}
-	if gallery.IsAlist {
-		files, err = alist.GetAlistFilesPath(addVideo.Path, true, gallery)
+	if gallery.IsCloud115 {
+		files, err = cloud115.GetCloud115FilesPath(addVideo.Path, gallery)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": err, "data": ""})
 			return
