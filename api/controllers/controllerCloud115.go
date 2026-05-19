@@ -79,14 +79,14 @@ func Proxy115File(c *gin.Context) {
 			c.String(http.StatusBadRequest, "无效的分享文件标识")
 			return
 		}
-		sharePC := parts[1]
+		shareFid := parts[1]
 		shareURL := parts[2]
-		pickCode, err := cloud115.TransferSingleShareFile(shareURL, sharePC)
+		newPc, err := cloud115.TransferSingleShareFile(shareURL, shareFid)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "转存失败: %s", err.Error())
 			return
 		}
-		dlURL, err := cloud115.Cloud115GetDownURL(pickCode)
+		dlURL, err := cloud115.Cloud115GetDownURL(newPc)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "获取下载链接失败: %s", err.Error())
 			return

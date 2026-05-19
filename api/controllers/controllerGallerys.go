@@ -1,15 +1,55 @@
 package controllers
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/msterzhang/onelist/api/database"
 	"github.com/msterzhang/onelist/api/models"
 	"github.com/msterzhang/onelist/api/repository"
 	"github.com/msterzhang/onelist/api/repository/crud"
+	"github.com/msterzhang/onelist/api/utils/dir"
+	"github.com/msterzhang/onelist/plugins/cloud115"
 
 	"github.com/gin-gonic/gin"
 )
+
+func parseShareAndStartScrape(gallery models.Gallery) (int, error) {
+	var path string
+	if gallery.ShareURL != "" {
+		path = gallery.ShareURL
+		gallery.IsCloud115 = true
+	}
+	if path == "" {
+		return 0, nil
+	}
+	var files []string
+	var err error
+	if gallery.IsCloud115 {
+		files, err = cloud115.GetCloud115FilesPath(path)
+	} else {
+		files = dir.GetFilesByPath(path)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if len(files) == 0 {
+		return 0, errors.New("分享链接中未找到视频文件")
+	}
+	db := database.NewDb()
+	work := models.Work{
+		GalleryUid: gallery.GalleryUid,
+		Path:       path,
+		FileNumber: len(files),
+	}
+	err = db.Model(&models.Work{}).Create(&work).Error
+	if err != nil {
+		return 0, err
+	}
+	go RunWork(files, work, gallery)
+	return len(files), nil
+}
 
 func CreateGallery(c *gin.Context) {
 	gallery := models.Gallery{}
@@ -26,7 +66,16 @@ func CreateGallery(c *gin.Context) {
 			c.JSON(200, gin.H{"code": 201, "msg": "创建失败!", "data": gallery})
 			return
 		}
-		c.JSON(200, gin.H{"code": 200, "msg": "创建成功!", "data": gallery})
+		count, err := parseShareAndStartScrape(gallery)
+		if err != nil {
+			c.JSON(200, gin.H{"code": 200, "msg": "创建成功，刮削失败: " + err.Error(), "data": gallery, "file_count": 0})
+			return
+		}
+		if count > 0 {
+			c.JSON(200, gin.H{"code": 200, "msg": fmt.Sprintf("创建成功，发现 %d 个视频文件，正在刮削...", count), "data": gallery, "file_count": count})
+		} else {
+			c.JSON(200, gin.H{"code": 200, "msg": "创建成功!", "data": gallery, "file_count": 0})
+		}
 	}(repo)
 }
 
@@ -55,12 +104,22 @@ func UpdateGalleryById(c *gin.Context) {
 	db := database.NewDb()
 	repo := crud.NewRepositoryGallerysCRUD(db)
 	func(galleryRepository repository.GalleryRepository) {
-		gallery, err := galleryRepository.UpdateByID(id, gallery)
+		_, err := galleryRepository.UpdateByID(id, gallery)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": "没有查询到资源!", "data": gallery})
 			return
 		}
-		c.JSON(200, gin.H{"code": 200, "msg": "更新资源成功!", "data": gallery})
+		gallery, _ = galleryRepository.FindByUID(gallery.GalleryUid)
+		count, err := parseShareAndStartScrape(gallery)
+		if err != nil {
+			c.JSON(200, gin.H{"code": 200, "msg": "更新成功，刮削失败: " + err.Error(), "data": gallery, "file_count": 0})
+			return
+		}
+		if count > 0 {
+			c.JSON(200, gin.H{"code": 200, "msg": fmt.Sprintf("更新成功，发现 %d 个视频文件，正在刮削...", count), "data": gallery, "file_count": count})
+		} else {
+			c.JSON(200, gin.H{"code": 200, "msg": "更新资源成功!", "data": gallery, "file_count": 0})
+		}
 	}(repo)
 }
 

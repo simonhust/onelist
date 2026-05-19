@@ -229,33 +229,61 @@ func GetCloud115FilesPath(pathOrCid string) ([]string, error) {
 	return fileList, nil
 }
 
+func collectShareFiles(shareCode, receiveCode, cid string, fileList *[]string, shareURL string) {
+	entries, err := getShareEntriesAll(shareCode, receiveCode, cid)
+	if err != nil {
+		return
+	}
+	SKIP_EXTS := map[string]bool{"png": true, "jpg": true, "jpeg": true, "webp": true, "nfo": true}
+	SKIP_RECURSE := map[string]bool{"BDMV": true, "CERTIFICATE": true}
+	for _, entry := range entries {
+		isFolder := entry.Fc == 0
+		upper := strings.ToUpper(entry.N)
+		if isFolder && SKIP_RECURSE[upper] {
+			continue
+		}
+		if !isFolder {
+			ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(entry.N)), ".")
+			if SKIP_EXTS[ext] || !strings.Contains(config.VideoTypes, "."+ext) {
+				continue
+			}
+			if entry.Fid != "" {
+				*fileList = append(*fileList, "share:"+entry.Fid+":"+shareURL)
+			}
+		} else {
+			collectShareFiles(shareCode, receiveCode, entry.Cid, fileList, shareURL)
+		}
+	}
+}
+
+func getShareEntriesAll(shareCode, receiveCode, cid string) ([]Cloud115FileEntry, error) {
+	var all []Cloud115FileEntry
+	offset := 0
+	for {
+		entries, _, err := Fetch115ShareEntries(shareCode, receiveCode, cid, offset)
+		if err != nil {
+			return nil, err
+		}
+		if len(entries) == 0 {
+			break
+		}
+		all = append(all, entries...)
+		offset += len(entries)
+		if len(entries) < 1150 {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return all, nil
+}
+
 func getFilesFromShareURL(shareURL string) ([]string, error) {
-	entries, err := Get115ShareTree(shareURL)
+	shareCode, receiveCode, err := ParseShareURL(shareURL)
 	if err != nil {
 		return nil, err
 	}
 	var fileList []string
-	for _, entry := range entries {
-		if entry.Fc == 0 {
-			subEntries, err := Get115ShareSubEntries(shareURL, entry.Cid)
-			if err != nil {
-				continue
-			}
-			for _, sub := range subEntries {
-				if sub.Fc == 0 && strings.ToUpper(sub.N) == "BDMV" {
-					fileList = append(fileList, "bdmv:"+entry.Cid+":"+shareURL)
-					continue
-				}
-				if filterVideoEntry(sub) && sub.Fc != 0 && sub.Pc != "" {
-					fileList = append(fileList, "share:"+sub.Pc+":"+shareURL)
-				}
-			}
-		} else {
-			if filterVideoEntry(entry) && entry.Pc != "" {
-				fileList = append(fileList, "share:"+entry.Pc+":"+shareURL)
-			}
-		}
-	}
+	collectShareFiles(shareCode, receiveCode, "0", &fileList, shareURL)
 	return fileList, nil
 }
 
@@ -781,36 +809,7 @@ func Transfer115ShareFile(shareURL string, fid string) (string, string, error) {
 	return "", "", errors.New("转存成功但未找到文件")
 }
 
-func findShareFidByPc(shareURL string, targetPc string) (string, error) {
-	entries, err := Get115ShareTree(shareURL)
-	if err != nil {
-		return "", err
-	}
-	for _, e := range entries {
-		if e.Fc == 0 {
-			subs, err := Get115ShareSubEntries(shareURL, e.Cid)
-			if err != nil {
-				continue
-			}
-			for _, s := range subs {
-				if s.Fc != 0 && s.Pc == targetPc {
-					return s.Fid, nil
-				}
-			}
-		} else {
-			if e.Pc == targetPc {
-				return e.Fid, nil
-			}
-		}
-	}
-	return "", errors.New("分享中未找到该文件")
-}
-
-func TransferSingleShareFile(shareURL string, targetPc string) (string, error) {
-	fid, err := findShareFidByPc(shareURL, targetPc)
-	if err != nil {
-		return "", err
-	}
+func TransferSingleShareFile(shareURL string, fid string) (string, error) {
 	_, newPc, err := Transfer115ShareFile(shareURL, fid)
 	if err != nil {
 		return "", err
