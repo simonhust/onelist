@@ -5,9 +5,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/msterzhang/onelist/api/database"
-	"github.com/msterzhang/onelist/api/models"
 	"github.com/msterzhang/onelist/api/utils/cache"
+	"github.com/msterzhang/onelist/config"
 	"github.com/msterzhang/onelist/plugins/cloud115"
 )
 
@@ -50,7 +49,7 @@ func Get115QRCodeStatus(c *gin.Context) {
 
 func Post115QRCodeLogin(c *gin.Context) {
 	uid := c.PostForm("uid")
-	galleryUid := c.PostForm("gallery_uid")
+	_ = c.PostForm("gallery_uid")
 
 	cookie, err := cloud115.Cloud115QRLogin(uid)
 	if err != nil {
@@ -58,14 +57,10 @@ func Post115QRCodeLogin(c *gin.Context) {
 		return
 	}
 
-	if galleryUid != "" {
-		db := database.NewDb()
-		gallery := models.Gallery{}
-		err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
-		if err == nil {
-			gallery.Cloud115Cookie = cookie
-			db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).Select("*").Updates(&gallery)
-		}
+	if cookie != "" {
+		cfg := config.GetConfig()
+		cfg.Cloud115Cookie = cookie
+		config.SaveConfig(cfg)
 	}
 
 	cache.NewCache().Delete("qrcode:" + uid)
@@ -73,10 +68,10 @@ func Post115QRCodeLogin(c *gin.Context) {
 }
 
 func Proxy115File(c *gin.Context) {
-	galleryUid := c.Param("gallery_uid")
+	_ = c.Param("gallery_uid")
 	pickCode := c.Param("pick_code")
 
-	dlURL, err := cloud115.Cloud115GetDownURL(pickCode, galleryUid)
+	dlURL, err := cloud115.Cloud115GetDownURL(pickCode)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "获取下载链接失败: %s", err.Error())
 		return
@@ -84,13 +79,41 @@ func Proxy115File(c *gin.Context) {
 	c.Redirect(http.StatusFound, dlURL)
 }
 
+func Get115ShareTree(c *gin.Context) {
+	shareURL := c.Query("url")
+	if shareURL == "" {
+		c.JSON(200, gin.H{"code": 201, "msg": "缺少分享链接"})
+		return
+	}
+	entries, err := cloud115.Get115ShareTree(shareURL)
+	if err != nil {
+		c.JSON(200, gin.H{"code": 201, "msg": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": 200, "msg": "success", "data": entries})
+}
+
+func Post115ShareTransfer(c *gin.Context) {
+	shareURL := c.PostForm("url")
+	if shareURL == "" {
+		c.JSON(200, gin.H{"code": 201, "msg": "缺少分享链接"})
+		return
+	}
+	files, err := cloud115.TransferAndScrapeShare(shareURL)
+	if err != nil {
+		c.JSON(200, gin.H{"code": 201, "msg": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": 200, "msg": "转存成功", "data": gin.H{"files": files, "count": len(files)}})
+}
+
 func Proxy115BDMV(c *gin.Context) {
-	galleryUid := c.Param("gallery_uid")
+	_ = c.Param("gallery_uid")
 	cid := c.Param("cid")
 	filepath := c.Param("filepath")
 
 	if filepath == "" || filepath == "/" {
-		entries, err := cloud115.Cloud115ListBDMVFiles(galleryUid, cid)
+		entries, err := cloud115.Cloud115ListBDMVFiles(cid)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": err.Error(), "data": ""})
 			return
@@ -99,13 +122,13 @@ func Proxy115BDMV(c *gin.Context) {
 		return
 	}
 
-	pickCode, err := cloud115.Cloud115FindFileInBDMV(galleryUid, cid, filepath)
+	pickCode, err := cloud115.Cloud115FindFileInBDMV(cid, filepath)
 	if err != nil {
 		c.String(http.StatusNotFound, "文件不存在: %s", err.Error())
 		return
 	}
 
-	dlURL, err := cloud115.Cloud115GetBDMVDownURL(galleryUid, pickCode)
+	dlURL, err := cloud115.Cloud115GetBDMVDownURL(pickCode)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "获取下载链接失败: %s", err.Error())
 		return

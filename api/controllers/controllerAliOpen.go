@@ -12,7 +12,7 @@ func AliOpenVideo(c *gin.Context) {
 		c.JSON(200, gin.H{"code": 201, "msg": "表单解析出错!", "data": aliOpenForm})
 		return
 	}
-	data, err := cloud115.Cloud115GetVideoPreview(aliOpenForm.File, aliOpenForm.GalleryUid)
+	data, err := cloud115.Cloud115GetVideoPreview(aliOpenForm.File)
 	if err != nil {
 		c.JSON(200, gin.H{"code": 201, "msg": err.Error(), "data": ""})
 		return

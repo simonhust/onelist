@@ -72,7 +72,7 @@ func UpdateErrFileById(c *gin.Context) {
 		return
 	}
 	if gallery.IsCloud115 {
-		err = cloud115.Cloud115RenameFile(errfile.File, fileName, gallery.GalleryUid)
+		err = cloud115.Cloud115RenameFile(errfile.File, fileName)
 	}
 	if err != nil {
 		c.JSON(200, gin.H{"code": 201, "msg": err, "data": errfile})
@@ -338,7 +338,7 @@ func RefErrTheTvById(c *gin.Context) {
 	}
 	var files = []string{}
 	if gallery.IsCloud115 {
-		files, err = cloud115.GetCloud115FilesPath(path, gallery)
+		files, err = cloud115.GetCloud115FilesPath(path)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": err, "data": ""})
 			return

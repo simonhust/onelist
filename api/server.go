@@ -320,6 +320,11 @@ func Run() {
 	// 115云盘文件302代理
 	r.GET("/v1/api/cloud115/file/:gallery_uid/*pick_code", controllers.Proxy115File)
 
+	// 115分享链接
+	cloud115Share := r.Group("/v1/api/cloud115/share")
+	cloud115Share.GET("/tree", controllers.Get115ShareTree)
+	cloud115Share.POST("/transfer", controllers.Post115ShareTransfer)
+
 	// 设置
 	setting := r.Group("/v1/api/config", auth.JWTAuth())
 	setting.POST("/save", auth.JWTAuthAdmin(), controllers.SaveConfig)

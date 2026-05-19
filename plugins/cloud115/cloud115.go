@@ -8,12 +8,11 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/msterzhang/onelist/api/database"
-	"github.com/msterzhang/onelist/api/models"
 	"github.com/msterzhang/onelist/config"
 )
 
@@ -21,6 +20,8 @@ const (
 	PRO_API       = "https://proapi.115.com"
 	PASSPORT_API  = "https://passportapi.115.com"
 	WEB_API       = "https://webapi.115.com"
+	SHARE_API     = "https://115cdn.com/webapi/share/snap"
+	QRCODE_API    = "https://qrcodeapi.115.com"
 	UA_CLOUD115   = "Mozilla/5.0 (115Tool/5.4)"
 )
 
@@ -56,7 +57,7 @@ func testTokenValid(accessToken string) bool {
 	return resp.StatusCode != 401
 }
 
-func refreshToken(refreshToken string) (string, string, error) {
+func refreshAccessToken(refreshToken string) (string, string, error) {
 	form := url.Values{}
 	form.Set("refresh_token", refreshToken)
 	req, err := http.NewRequest("POST", PASSPORT_API+"/open/refreshToken", strings.NewReader(form.Encode()))
@@ -85,19 +86,18 @@ func refreshToken(refreshToken string) (string, string, error) {
 	return "", "", errors.New(data.Error)
 }
 
-func ensureValidToken(gallery *models.Gallery) error {
-	if !testTokenValid(gallery.Cloud115Token) {
-		newAt, newRt, err := refreshToken(gallery.Cloud115RefreshToken)
+func ensureValidToken() error {
+	if !testTokenValid(config.Cloud115Token) {
+		newAt, newRt, err := refreshAccessToken(config.Cloud115RefreshToken)
 		if err != nil {
 			return err
 		}
-		gallery.Cloud115Token = newAt
-		gallery.Cloud115RefreshToken = newRt
-		db := database.NewDb()
-		err = db.Model(&models.Gallery{}).Where("id = ?", gallery.Id).Select("*").Updates(gallery).Error
-		if err != nil {
-			return err
-		}
+		config.Cloud115Token = newAt
+		config.Cloud115RefreshToken = newRt
+		cfg := config.GetConfig()
+		cfg.Cloud115Token = newAt
+		cfg.Cloud115RefreshToken = newRt
+		config.SaveConfig(cfg)
 	}
 	return nil
 }
@@ -204,36 +204,30 @@ func listFilesRecursive(accessToken string, cid string, fileList []string) ([]st
 	return fileList, nil
 }
 
-func GetCloud115FilesPath(cid string, gallery models.Gallery) ([]string, error) {
+func GetCloud115FilesPath(cid string) ([]string, error) {
 	if cid == "" {
 		cid = "0"
 	}
-	err := ensureValidToken(&gallery)
+	err := ensureValidToken()
 	if err != nil {
 		return nil, err
 	}
 	fileList := []string{}
-	fileList, err = listFilesRecursive(gallery.Cloud115Token, cid, fileList)
+	fileList, err = listFilesRecursive(config.Cloud115Token, cid, fileList)
 	if err != nil {
 		return nil, err
 	}
 	for _, f := range fileList {
 		if strings.HasPrefix(f, "bdmv:") {
 			bdmvCid := strings.TrimPrefix(f, "bdmv:")
-			go getCachedBDMVTree(gallery.GalleryUid, bdmvCid)
+			go getCachedBDMVTree(bdmvCid)
 		}
 	}
 	return fileList, nil
 }
 
-func Cloud115RenameFile(fid string, newName string, galleryUid string) error {
-	gallery := models.Gallery{}
-	db := database.NewDb()
-	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
-	if err != nil {
-		return err
-	}
-	err = ensureValidToken(&gallery)
+func Cloud115RenameFile(fid string, newName string) error {
+	err := ensureValidToken()
 	if err != nil {
 		return err
 	}
@@ -247,8 +241,8 @@ func Cloud115RenameFile(fid string, newName string, galleryUid string) error {
 	}
 	req.Header.Set("User-Agent", UA_CLOUD115)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if gallery.Cloud115Cookie != "" {
-		req.Header.Set("Cookie", gallery.Cloud115Cookie)
+	if config.Cloud115Cookie != "" {
+		req.Header.Set("Cookie", config.Cloud115Cookie)
 	}
 	resp, err := httpClient().Do(req)
 	if err != nil {
@@ -270,14 +264,8 @@ func Cloud115RenameFile(fid string, newName string, galleryUid string) error {
 	return errors.New(data.Error)
 }
 
-func Cloud115GetDownURL(pickCode string, galleryUid string) (string, error) {
-	gallery := models.Gallery{}
-	db := database.NewDb()
-	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
-	if err != nil {
-		return "", err
-	}
-	err = ensureValidToken(&gallery)
+func Cloud115GetDownURL(pickCode string) (string, error) {
+	err := ensureValidToken()
 	if err != nil {
 		return "", err
 	}
@@ -289,7 +277,7 @@ func Cloud115GetDownURL(pickCode string, galleryUid string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("User-Agent", UA_CLOUD115)
-	req.Header.Set("Authorization", "Bearer "+gallery.Cloud115Token)
+	req.Header.Set("Authorization", "Bearer "+config.Cloud115Token)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := httpClient().Do(req)
 	if err != nil {
@@ -313,14 +301,8 @@ func Cloud115GetDownURL(pickCode string, galleryUid string) (string, error) {
 	return "", errors.New(data.Message)
 }
 
-func Cloud115GetVideoPreview(pickCode string, galleryUid string) (Cloud115OpenVideo, error) {
-	gallery := models.Gallery{}
-	db := database.NewDb()
-	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
-	if err != nil {
-		return Cloud115OpenVideo{}, err
-	}
-	err = ensureValidToken(&gallery)
+func Cloud115GetVideoPreview(pickCode string) (Cloud115OpenVideo, error) {
+	err := ensureValidToken()
 	if err != nil {
 		return Cloud115OpenVideo{}, err
 	}
@@ -332,7 +314,7 @@ func Cloud115GetVideoPreview(pickCode string, galleryUid string) (Cloud115OpenVi
 		return Cloud115OpenVideo{}, err
 	}
 	req.Header.Set("User-Agent", UA_CLOUD115)
-	req.Header.Set("Authorization", "Bearer "+gallery.Cloud115Token)
+	req.Header.Set("Authorization", "Bearer "+config.Cloud115Token)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := httpClient().Do(req)
 	if err != nil {
@@ -362,7 +344,7 @@ func Cloud115GetVideoPreview(pickCode string, galleryUid string) (Cloud115OpenVi
 }
 
 func Cloud115GetQRCode() (string, string, int64, string, error) {
-	api := fmt.Sprintf("https://qrcodeapi.115.com/api/1.0/web/1.0/token/")
+	api := fmt.Sprintf("%s/api/1.0/web/1.0/token/", QRCODE_API)
 	req, err := http.NewRequest("GET", api, nil)
 	if err != nil {
 		return "", "", 0, "", err
@@ -389,7 +371,7 @@ func Cloud115GetQRCode() (string, string, int64, string, error) {
 }
 
 func Cloud115CheckQRStatus(uid string, signTime int64, sign string) (int, error) {
-	api := fmt.Sprintf("https://qrcodeapi.115.com/get/status/?uid=%s&time=%d&sign=%s", uid, signTime, sign)
+	api := fmt.Sprintf("%s/get/status/?uid=%s&time=%d&sign=%s", QRCODE_API, uid, signTime, sign)
 	req, err := http.NewRequest("GET", api, nil)
 	if err != nil {
 		return 0, err
@@ -450,22 +432,16 @@ func Cloud115QRLogin(uid string) (string, error) {
 	return "", errors.New(data.Error)
 }
 
-func Cloud115ListBDMVFiles(galleryUid string, cid string) ([]Cloud115FileEntry, error) {
-	gallery := models.Gallery{}
-	db := database.NewDb()
-	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
+func Cloud115ListBDMVFiles(cid string) ([]Cloud115FileEntry, error) {
+	err := ensureValidToken()
 	if err != nil {
 		return nil, err
 	}
-	err = ensureValidToken(&gallery)
-	if err != nil {
-		return nil, err
-	}
-	return getAllEntriesByCid(gallery.Cloud115Token, cid)
+	return getAllEntriesByCid(config.Cloud115Token, cid)
 }
 
-func Cloud115FindFileInBDMV(galleryUid string, rootCid string, filePath string) (string, error) {
-	tree, err := getCachedBDMVTree(galleryUid, rootCid)
+func Cloud115FindFileInBDMV(rootCid string, filePath string) (string, error) {
+	tree, err := getCachedBDMVTree(rootCid)
 	if err != nil {
 		return "", err
 	}
@@ -477,7 +453,7 @@ func Cloud115FindFileInBDMV(galleryUid string, rootCid string, filePath string) 
 	return pickCode, nil
 }
 
-func getCachedBDMVTree(galleryUid string, rootCid string) (map[string]string, error) {
+func getCachedBDMVTree(rootCid string) (map[string]string, error) {
 	bdmvCacheMu.RLock()
 	entry, exists := bdmvCache[rootCid]
 	bdmvCacheMu.RUnlock()
@@ -485,19 +461,13 @@ func getCachedBDMVTree(galleryUid string, rootCid string) (map[string]string, er
 		return entry.data, nil
 	}
 
-	gallery := models.Gallery{}
-	db := database.NewDb()
-	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
-	if err != nil {
-		return nil, err
-	}
-	err = ensureValidToken(&gallery)
+	err := ensureValidToken()
 	if err != nil {
 		return nil, err
 	}
 
 	tree := make(map[string]string)
-	err = buildBDMVTree(gallery.Cloud115Token, rootCid, "", tree)
+	err = buildBDMVTree(config.Cloud115Token, rootCid, "", tree)
 	if err != nil {
 		return nil, err
 	}
@@ -534,14 +504,8 @@ func buildBDMVTree(accessToken string, cid string, prefix string, result map[str
 	return nil
 }
 
-func Cloud115GetBDMVDownURL(galleryUid string, pickCode string) (string, error) {
-	gallery := models.Gallery{}
-	db := database.NewDb()
-	err := db.Model(&models.Gallery{}).Where("gallery_uid = ?", galleryUid).First(&gallery).Error
-	if err != nil {
-		return "", err
-	}
-	err = ensureValidToken(&gallery)
+func Cloud115GetBDMVDownURL(pickCode string) (string, error) {
+	err := ensureValidToken()
 	if err != nil {
 		return "", err
 	}
@@ -553,7 +517,7 @@ func Cloud115GetBDMVDownURL(galleryUid string, pickCode string) (string, error) 
 		return "", err
 	}
 	req.Header.Set("User-Agent", UA_CLOUD115)
-	req.Header.Set("Authorization", "Bearer "+gallery.Cloud115Token)
+	req.Header.Set("Authorization", "Bearer "+config.Cloud115Token)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := httpClient().Do(req)
 	if err != nil {
@@ -575,4 +539,260 @@ func Cloud115GetBDMVDownURL(galleryUid string, pickCode string) (string, error) 
 		}
 	}
 	return "", errors.New(data.Message)
+}
+
+func ParseShareURL(shareURL string) (shareCode string, receiveCode string, err error) {
+	re := regexp.MustCompile(`/s/([a-zA-Z0-9]+)`)
+	matches := re.FindStringSubmatch(shareURL)
+	if len(matches) < 2 {
+		return "", "", errors.New("无法解析分享链接")
+	}
+	shareCode = matches[1]
+	parsed, err := url.Parse(shareURL)
+	if err != nil {
+		return shareCode, "", nil
+	}
+	receiveCode = parsed.Query().Get("password")
+	if receiveCode == "" {
+		receiveCode = parsed.Query().Get("pwd")
+	}
+	return shareCode, receiveCode, nil
+}
+
+func Fetch115ShareEntries(shareCode string, receiveCode string, cid string, offset int) ([]Cloud115FileEntry, int, error) {
+	api := fmt.Sprintf("%s?share_code=%s&receive_code=%s&cid=%s&offset=%d&limit=1150&asc=1&o=file_name&format=json",
+		SHARE_API, shareCode, receiveCode, cid, offset)
+	req, err := http.NewRequest("GET", api, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("User-Agent", UA_CLOUD115)
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, err
+	}
+	var data Cloud115RspShareFiles
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !data.State {
+		return nil, 0, errors.New(data.Error)
+	}
+	return data.Data.List, data.Data.Count, nil
+}
+
+func Get115ShareTree(shareURL string) ([]Cloud115FileEntry, error) {
+	shareCode, receiveCode, err := ParseShareURL(shareURL)
+	if err != nil {
+		return nil, err
+	}
+	var allEntries []Cloud115FileEntry
+	offset := 0
+	for {
+		entries, _, err := Fetch115ShareEntries(shareCode, receiveCode, "0", offset)
+		if err != nil {
+			return nil, err
+		}
+		if len(entries) == 0 {
+			break
+		}
+		allEntries = append(allEntries, entries...)
+		offset += len(entries)
+		if len(entries) < 1150 {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return allEntries, nil
+}
+
+func Get115ShareSubEntries(shareURL string, cid string) ([]Cloud115FileEntry, error) {
+	shareCode, receiveCode, err := ParseShareURL(shareURL)
+	if err != nil {
+		return nil, err
+	}
+	var allEntries []Cloud115FileEntry
+	offset := 0
+	for {
+		entries, _, err := Fetch115ShareEntries(shareCode, receiveCode, cid, offset)
+		if err != nil {
+			return nil, err
+		}
+		if len(entries) == 0 {
+			break
+		}
+		allEntries = append(allEntries, entries...)
+		offset += len(entries)
+		if len(entries) < 1150 {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return allEntries, nil
+}
+
+func Transfer115ShareFile(shareURL string, fid string) (string, string, error) {
+	shareCode, receiveCode, err := ParseShareURL(shareURL)
+	if err != nil {
+		return "", "", err
+	}
+	headers := map[string]string{
+		"User-Agent": UA_CLOUD115,
+		"Referer":    "https://115cdn.com/s/" + shareCode,
+	}
+	if config.Cloud115Cookie != "" {
+		headers["Cookie"] = config.Cloud115Cookie
+	}
+	form := url.Values{}
+	form.Set("share_code", shareCode)
+	form.Set("receive_code", receiveCode)
+	form.Set("file_id", fid)
+
+	req, err := http.NewRequest("POST", "https://115cdn.com/webapi/share/receive", strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("User-Agent", UA_CLOUD115)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if config.Cloud115Cookie != "" {
+		req.Header.Set("Cookie", config.Cloud115Cookie)
+	}
+	req.Header.Set("Referer", "https://115cdn.com/s/"+shareCode)
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", err
+	}
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	if state, ok := result["state"].(bool); !ok || !state {
+		msg := ""
+		if m, ok := result["msg"].(string); ok {
+			if !strings.Contains(m, "无需重复接收") {
+				return "", "", errors.New(m)
+			}
+		} else {
+			return "", "", errors.New(msg)
+		}
+	}
+	time.Sleep(2 * time.Second)
+
+	rootReq, err := http.NewRequest("GET", WEB_API+"/files?cid=0", nil)
+	if err != nil {
+		return "", "", err
+	}
+	rootReq.Header.Set("User-Agent", UA_CLOUD115)
+	if config.Cloud115Cookie != "" {
+		rootReq.Header.Set("Cookie", config.Cloud115Cookie)
+	}
+	rootResp, err := httpClient().Do(rootReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer rootResp.Body.Close()
+	rootBody, _ := io.ReadAll(rootResp.Body)
+	var rootData Cloud115RspFiles
+	json.Unmarshal(rootBody, &rootData)
+	var receiveCid string
+	for _, item := range rootData.Data {
+		if item.N == "最近接收" && item.Fc == 0 {
+			receiveCid = item.Cid
+			break
+		}
+	}
+	if receiveCid == "" {
+		return "", "", errors.New("未找到最近接收目录")
+	}
+
+	params := url.Values{}
+	params.Set("cid", receiveCid)
+	params.Set("o", "user_ptime")
+	params.Set("asc", "0")
+	params.Set("limit", "30")
+	params.Set("format", "json")
+	filesReq, err := http.NewRequest("GET", WEB_API+"/files?"+params.Encode(), nil)
+	if err != nil {
+		return "", "", err
+	}
+	filesReq.Header.Set("User-Agent", UA_CLOUD115)
+	if config.Cloud115Cookie != "" {
+		filesReq.Header.Set("Cookie", config.Cloud115Cookie)
+	}
+	filesResp, err := httpClient().Do(filesReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer filesResp.Body.Close()
+	filesBody, _ := io.ReadAll(filesResp.Body)
+	var filesData Cloud115RspFiles
+	json.Unmarshal(filesBody, &filesData)
+	if !filesData.State {
+		return "", "", errors.New("获取转存文件列表失败")
+	}
+
+	for _, f := range filesData.Data {
+		if f.Fid != "" {
+			return f.Fid, f.Pc, nil
+		}
+	}
+	return "", "", errors.New("转存成功但未找到文件")
+}
+
+func TransferAndScrapeShare(shareURL string) ([]string, error) {
+	entries, err := Get115ShareTree(shareURL)
+	if err != nil {
+		return nil, err
+	}
+	var fileList []string
+	for _, entry := range entries {
+		if entry.Fc == 0 {
+			subEntries, err := Get115ShareSubEntries(shareURL, entry.Cid)
+			if err != nil {
+				continue
+			}
+			for _, sub := range subEntries {
+				if sub.Fc == 0 && strings.ToUpper(sub.N) == "BDMV" {
+					_, pc, err := Transfer115ShareFile(shareURL, entry.Fid)
+					if err != nil {
+						continue
+					}
+					bdmvCid := ""
+					if pc != "" {
+						fileList = append(fileList, "bdmv:"+bdmvCid)
+					}
+					continue
+				}
+				if filterVideoEntry(sub) && sub.Fc != 0 {
+					_, pc, err := Transfer115ShareFile(shareURL, sub.Fid)
+					if err != nil {
+						continue
+					}
+					if pc != "" {
+						fileList = append(fileList, pc)
+					}
+				}
+			}
+		} else {
+			if filterVideoEntry(entry) {
+				_, pc, err := Transfer115ShareFile(shareURL, entry.Fid)
+				if err != nil {
+					continue
+				}
+				if pc != "" {
+					fileList = append(fileList, pc)
+				}
+			}
+		}
+	}
+	return fileList, nil
 }

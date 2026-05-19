@@ -44,6 +44,15 @@ type Cloud115RspRename struct {
 	Error string `json:"error"`
 }
 
+type Cloud115RspShareFiles struct {
+	State bool              `json:"state"`
+	Error string            `json:"error"`
+	Data  struct {
+		List  []Cloud115FileEntry `json:"list"`
+		Count int                `json:"count"`
+	} `json:"data"`
+}
+
 type Cloud115RspVideoPreview struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`

@@ -11,22 +11,25 @@ import (
 )
 
 var (
-	EnvFile       = "config.env"
-	PORT          = 0
-	Title         = ""
-	FaviconicoUrl = ""
-	SECRETKEY     []byte
-	DBDRIVER      = ""
-	DBURL         = ""
-	DBDATAURL     = ""
-	DbName        = ""
-	KeyDb         = ""
-	UserEmail     = ""
-	UserPassword  = ""
-	DownLoadImage = ""
-	ImgUrl        = ""
-	VideoTypes    = ""
-	UA            = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+	EnvFile              = "config.env"
+	PORT                 = 0
+	Title                = ""
+	FaviconicoUrl        = ""
+	SECRETKEY            []byte
+	DBDRIVER             = ""
+	DBURL                = ""
+	DBDATAURL            = ""
+	DbName               = ""
+	KeyDb                = ""
+	UserEmail            = ""
+	UserPassword         = ""
+	DownLoadImage        = ""
+	ImgUrl               = ""
+	VideoTypes           = ""
+	Cloud115Token        = ""
+	Cloud115RefreshToken = ""
+	Cloud115Cookie       = ""
+	UA                   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 )
 
 // Load the server PORT
@@ -68,17 +71,23 @@ func Load() {
 	DownLoadImage = os.Getenv("DownLoadImage")
 	ImgUrl = os.Getenv("ImgUrl")
 	VideoTypes = os.Getenv("VideoTypes")
+	Cloud115Token = os.Getenv("Cloud115Token")
+	Cloud115RefreshToken = os.Getenv("Cloud115RefreshToken")
+	Cloud115Cookie = os.Getenv("Cloud115Cookie")
 }
 
 // 获取配置
 func GetConfig() models.Config {
 	config := models.Config{
-		Title:         Title,
-		DownLoadImage: DownLoadImage,
-		ImgUrl:        ImgUrl,
-		KeyDb:         KeyDb,
-		FaviconicoUrl: FaviconicoUrl,
-		VideoTypes:    VideoTypes,
+		Title:                Title,
+		DownLoadImage:        DownLoadImage,
+		ImgUrl:               ImgUrl,
+		KeyDb:                KeyDb,
+		FaviconicoUrl:        FaviconicoUrl,
+		VideoTypes:           VideoTypes,
+		Cloud115Token:        Cloud115Token,
+		Cloud115RefreshToken: Cloud115RefreshToken,
+		Cloud115Cookie:       Cloud115Cookie,
 	}
 	return config
 }
@@ -91,6 +100,9 @@ func SetConfig(config models.Config) {
 	KeyDb = config.KeyDb
 	FaviconicoUrl = config.FaviconicoUrl
 	VideoTypes = config.VideoTypes
+	Cloud115Token = config.Cloud115Token
+	Cloud115RefreshToken = config.Cloud115RefreshToken
+	Cloud115Cookie = config.Cloud115Cookie
 }
 
 // 保存配置
@@ -105,6 +117,21 @@ func SaveConfig(config models.Config) (models.Config, error) {
 	data = strings.ReplaceAll(data, "FaviconicoUrl="+FaviconicoUrl, "FaviconicoUrl="+config.FaviconicoUrl)
 	data = strings.ReplaceAll(data, "KeyDb="+KeyDb, "KeyDb="+config.KeyDb)
 	data = strings.ReplaceAll(data, "VideoTypes="+VideoTypes, "VideoTypes="+config.VideoTypes)
+	if strings.Contains(data, "Cloud115Token=") {
+		data = strings.ReplaceAll(data, "Cloud115Token="+Cloud115Token, "Cloud115Token="+config.Cloud115Token)
+	} else {
+		data += "\nCloud115Token=" + config.Cloud115Token
+	}
+	if strings.Contains(data, "Cloud115RefreshToken=") {
+		data = strings.ReplaceAll(data, "Cloud115RefreshToken="+Cloud115RefreshToken, "Cloud115RefreshToken="+config.Cloud115RefreshToken)
+	} else {
+		data += "\nCloud115RefreshToken=" + config.Cloud115RefreshToken
+	}
+	if strings.Contains(data, "Cloud115Cookie=") {
+		data = strings.ReplaceAll(data, "Cloud115Cookie="+Cloud115Cookie, "Cloud115Cookie="+config.Cloud115Cookie)
+	} else {
+		data += "\nCloud115Cookie=" + config.Cloud115Cookie
+	}
 	content := []byte(data)
 	err = os.WriteFile(EnvFile, content, 0644)
 	if err != nil {

@@ -22,7 +22,7 @@ func RunWork(work models.Work) {
 		}
 		var files = []string{}
 		if gallery.IsCloud115 {
-			files, err = cloud115.GetCloud115FilesPath(work.Path, gallery)
+			files, err = cloud115.GetCloud115FilesPath(work.Path)
 			if err != nil {
 				return
 			}

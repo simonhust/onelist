@@ -98,7 +98,7 @@ func CreateWork(c *gin.Context) {
 	work.GalleryUid = gallery.GalleryUid
 	var files = []string{}
 	if gallery.IsCloud115 {
-		files, err = cloud115.GetCloud115FilesPath(work.Path, gallery)
+		files, err = cloud115.GetCloud115FilesPath(work.Path)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": err.Error(), "data": work})
 			return
@@ -139,7 +139,7 @@ func ReNewWork(c *gin.Context) {
 	work.GalleryUid = gallery.GalleryUid
 	var files = []string{}
 	if gallery.IsCloud115 {
-		files, err = cloud115.GetCloud115FilesPath(work.Path, gallery)
+		files, err = cloud115.GetCloud115FilesPath(work.Path)
 		if err != nil {
 			c.JSON(200, gin.H{"code": 201, "msg": err.Error(), "data": ""})
 			return
